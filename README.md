@@ -22,11 +22,7 @@ A high-performance, resilient Go binary for bidirectional data synchronization b
 
 ### 1. Configure the Bridge
 
-Copy the example configuration and update your credentials:
-
-```bash
-cp config.yaml.example config.yaml # Use the provided config.yaml as a base
-```
+Edit the provided `config.yaml` and update your credentials (OAuth/Basic, Kafka brokers, tables/topics).
 
 ### 2. Run with Docker Compose
 
@@ -43,11 +39,13 @@ docker compose up --build
 
 ## 📚 Documentation
 
-Detailed guides are available in the parent directory's `.local` folder:
+Detailed guides are available in `docs/`:
 
-- [Configuration Guide](../.local/CONFIGURATION_GUIDE.md): Detailed parameter descriptions and environment variables.
-- [Design Guide](../.local/DESIGN_GUIDE.md): Architectural deep dive and data flow logic.
-- [LLD](../.local/LLD.md): Low-level design diagrams.
+- [Configuration Guide](docs/CONFIGURATION_GUIDE.md): Detailed parameter descriptions and environment variables.
+- [Design Guide](docs/DESIGN_GUIDE.md): Architectural deep dive and data flow logic.
+- [LLD](docs/LLD.md): Low-level design diagrams.
+- [Walkthrough](docs/walkthrough.md): Project structure and operational overview.
+- [Future Roadmap](docs/future_roadmap.md): Planned enhancements and long-term vision.
 
 ## 🧪 Testing
 

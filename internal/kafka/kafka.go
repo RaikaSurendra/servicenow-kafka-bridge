@@ -33,14 +33,20 @@ package kafka
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 	"github.com/hamba/avro/v2"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl"
+	"github.com/twmb/franz-go/pkg/sasl/plain"
+	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
 // Producer wraps a franz-go client for producing messages to Kafka.
@@ -58,14 +64,18 @@ type Producer struct {
 // NewProducer creates a Kafka producer from the bridge configuration.
 // The producer is ready to use immediately after construction.
 func NewProducer(cfg config.KafkaConfig, logger *slog.Logger) (*Producer, error) {
-	opts := []kgo.Opt{
-		kgo.SeedBrokers(cfg.Brokers...),
+	baseOpts, err := buildBaseClientOpts(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := append(baseOpts,
 		kgo.RequiredAcks(kgo.AllISRAcks()), // -1: wait for all in-sync replicas
 		kgo.ProducerBatchCompression(kgo.SnappyCompression()),
 		kgo.RecordRetries(5),
-		kgo.RetryTimeout(30 * time.Second),
-		kgo.ProducerBatchMaxBytes(1 << 20), // 1 MiB
-	}
+		kgo.RetryTimeout(30*time.Second),
+		kgo.ProducerBatchMaxBytes(1<<20), // 1 MiB
+	)
 
 	client, err := kgo.NewClient(opts...)
 	if err != nil {
@@ -221,13 +231,17 @@ func NewConsumer(cfg config.KafkaConfig, groupID string, topics []string, logger
 		return nil, fmt.Errorf("at least one topic is required")
 	}
 
-	opts := []kgo.Opt{
-		kgo.SeedBrokers(cfg.Brokers...),
+	baseOpts, err := buildBaseClientOpts(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := append(baseOpts,
 		kgo.ConsumerGroup(groupID),
 		kgo.ConsumeTopics(topics...),
 		kgo.DisableAutoCommit(),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
-	}
+	)
 
 	client, err := kgo.NewClient(opts...)
 	if err != nil {
@@ -277,4 +291,73 @@ func (c *Consumer) CommitOffsets(ctx context.Context) error {
 // Close leaves the consumer group and releases resources.
 func (c *Consumer) Close() {
 	c.client.Close()
+}
+
+func buildBaseClientOpts(cfg config.KafkaConfig, logger *slog.Logger) ([]kgo.Opt, error) {
+	opts := []kgo.Opt{
+		kgo.SeedBrokers(cfg.Brokers...),
+	}
+
+	if cfg.TLS.Enabled {
+		tlsConfig, err := buildTLSConfig(cfg.TLS)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, kgo.DialTLSConfig(tlsConfig))
+		if logger != nil {
+			logger.Info("Kafka TLS enabled")
+		}
+	}
+
+	if cfg.SASL.Mechanism != "" {
+		mech, err := buildSASLMechanism(cfg.SASL)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, kgo.SASL(mech))
+		if logger != nil {
+			logger.Info("Kafka SASL enabled", "mechanism", cfg.SASL.Mechanism)
+		}
+	}
+
+	return opts, nil
+}
+
+func buildTLSConfig(cfg config.TLSConfig) (*tls.Config, error) {
+	tlsConfig := &tls.Config{}
+	if cfg.CACert != "" {
+		caPEM, err := os.ReadFile(cfg.CACert)
+		if err != nil {
+			return nil, fmt.Errorf("reading kafka ca cert: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if ok := pool.AppendCertsFromPEM(caPEM); !ok {
+			return nil, fmt.Errorf("parsing kafka ca cert: %s", cfg.CACert)
+		}
+		tlsConfig.RootCAs = pool
+	}
+	if cfg.CertFile != "" && cfg.KeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("loading kafka client cert: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+	return tlsConfig, nil
+}
+
+func buildSASLMechanism(cfg config.SASLConfig) (sasl.Mechanism, error) {
+	switch strings.ToUpper(cfg.Mechanism) {
+	case "PLAIN":
+		auth := plain.Auth{User: cfg.Username, Pass: cfg.Password}
+		return auth.AsMechanism(), nil
+	case "SCRAM-SHA-256":
+		auth := scram.Auth{User: cfg.Username, Pass: cfg.Password}
+		return auth.AsSha256Mechanism(), nil
+	case "SCRAM-SHA-512":
+		auth := scram.Auth{User: cfg.Username, Pass: cfg.Password}
+		return auth.AsSha512Mechanism(), nil
+	default:
+		return nil, fmt.Errorf("unsupported SASL mechanism: %s", cfg.Mechanism)
+	}
 }

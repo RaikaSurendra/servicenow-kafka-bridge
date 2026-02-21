@@ -34,6 +34,46 @@ offset:
   storage: file
 `
 
+const sinkYAML = `
+servicenow:
+  base_url: https://example.com
+  auth:
+    type: basic
+    basic:
+      username: user
+      password: pass
+kafka:
+  brokers: [localhost:9092]
+source:
+  enabled: false
+sink:
+  enabled: true
+  topics:
+    - topic: sn.incident
+      table: incident
+`
+
+const saslYAML = `
+servicenow:
+  base_url: https://example.com
+  auth:
+    type: basic
+    basic:
+      username: user
+      password: pass
+kafka:
+  brokers: [localhost:9092]
+  sasl:
+    mechanism: PLAIN
+source:
+  enabled: true
+  topic_prefix: sn
+  tables:
+    - name: incident
+      timestamp_field: sys_updated_on
+      identifier_field: sys_id
+`
+
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -42,6 +82,34 @@ func writeTemp(t *testing.T, content string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func TestSASLValidation(t *testing.T) {
+	path := writeTemp(t, saslYAML)
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected error for missing SASL credentials")
+	}
+	if !strings.Contains(err.Error(), "kafka.sasl.username") {
+		t.Errorf("error should mention kafka.sasl.username: %v", err)
+	}
+}
+
+func TestSinkDefaults(t *testing.T) {
+	path := writeTemp(t, sinkYAML)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if cfg.Sink.GroupID != "servicenow-kafka-bridge-sink" {
+		t.Errorf("GroupID default = %q", cfg.Sink.GroupID)
+	}
+	if cfg.Sink.CommitOnPartialFailure == nil || !cfg.Sink.CommitOnPartialFailureValue() {
+		t.Errorf("CommitOnPartialFailure default = %v", cfg.Sink.CommitOnPartialFailure)
+	}
+	if cfg.Sink.Concurrency != 5 {
+		t.Errorf("Concurrency default = %d, want 5", cfg.Sink.Concurrency)
+	}
 }
 
 func TestLoadValidConfig(t *testing.T) {

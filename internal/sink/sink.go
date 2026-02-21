@@ -60,12 +60,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 	kafkapkg "github.com/RaikaSurendra/servicenow-kafka-bridge/internal/kafka"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/observability"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
 )
 
@@ -146,11 +148,14 @@ func (w *Worker) Run(ctx context.Context) error {
 		// Process records concurrently using an errgroup with a limit.
 		g, gCtx := errgroup.WithContext(ctx)
 		g.SetLimit(w.sinkConfig.Concurrency)
+		var hadFailure atomic.Bool
 
 		for _, rec := range records {
 			rec := rec // capture loop variable
 			g.Go(func() error {
 				if err := w.processRecord(gCtx, rec.Value); err != nil {
+					hadFailure.Store(true)
+					observability.Metrics.SinkErrorsTotal.WithLabelValues(w.topicConfig.Table, "write").Inc()
 					w.logger.Error("failed to write record to ServiceNow",
 						"error", err,
 						"partition", rec.Partition,
@@ -160,6 +165,7 @@ func (w *Worker) Run(ctx context.Context) error {
 					// If DLQ is enabled, move the record to the DLQ topic.
 					if w.sinkConfig.DLQTopic != "" && w.producer != nil {
 						if dlqErr := w.moveToDLQ(gCtx, rec.Value, err); dlqErr != nil {
+							observability.Metrics.SinkErrorsTotal.WithLabelValues(w.topicConfig.Table, "dlq").Inc()
 							w.logger.Error("failed to move record to DLQ", "error", dlqErr)
 						} else {
 							w.logger.Info("record moved to DLQ", "topic", w.sinkConfig.DLQTopic)
@@ -180,9 +186,16 @@ func (w *Worker) Run(ctx context.Context) error {
 		w.logger.Debug("batch processed", "total", len(records))
 
 		// Commit offsets after processing the batch.
-		// Even if some records failed, we commit to avoid re-processing
-		// records that already succeeded. Failed records are logged.
+		// Optionally skip commits when partial failures occurred.
+		if hadFailure.Load() && !w.sinkConfig.CommitOnPartialFailureValue() {
+			w.logger.Warn("skipping offset commit due to partial failures",
+				"topic", w.topicConfig.Topic,
+				"table", w.topicConfig.Table,
+			)
+			continue
+		}
 		if err := w.consumer.CommitOffsets(ctx); err != nil {
+			observability.Metrics.SinkErrorsTotal.WithLabelValues(w.topicConfig.Table, "commit").Inc()
 			w.logger.Error("failed to commit offsets", "error", err)
 		}
 	}
@@ -209,6 +222,7 @@ func (w *Worker) processRecord(ctx context.Context, value []byte) error {
 		if err != nil {
 			return fmt.Errorf("updating record %s: %w", sysID, err)
 		}
+		observability.Metrics.SinkRecordsTotal.WithLabelValues(w.topicConfig.Table, "update").Inc()
 	} else {
 		// Insert new record.
 		w.logger.Debug("inserting new record", "table", w.topicConfig.Table)
@@ -216,6 +230,7 @@ func (w *Worker) processRecord(ctx context.Context, value []byte) error {
 		if err != nil {
 			return fmt.Errorf("inserting record: %w", err)
 		}
+		observability.Metrics.SinkRecordsTotal.WithLabelValues(w.topicConfig.Table, "insert").Inc()
 	}
 
 	return nil

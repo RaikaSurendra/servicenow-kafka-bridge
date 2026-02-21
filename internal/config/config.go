@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -110,6 +111,18 @@ type SinkConfig struct {
 	Topics      []SinkTopicConfig `yaml:"topics"`
 	Concurrency int               `yaml:"concurrency"`
 	DLQTopic    string            `yaml:"dlq_topic"`
+	GroupID     string            `yaml:"group_id"`
+	// CommitOnPartialFailure controls whether offsets are committed when
+	// some records in a batch fail. Defaults to true when unset.
+	CommitOnPartialFailure *bool `yaml:"commit_on_partial_failure"`
+}
+
+// CommitOnPartialFailureValue returns the effective commit policy.
+func (s SinkConfig) CommitOnPartialFailureValue() bool {
+	if s.CommitOnPartialFailure == nil {
+		return true
+	}
+	return *s.CommitOnPartialFailure
 }
 
 // SinkTopicConfig maps a Kafka topic to a ServiceNow table.
@@ -257,6 +270,13 @@ func applyDefaults(cfg *Config) {
 		if cfg.Sink.Concurrency <= 0 {
 			cfg.Sink.Concurrency = 5
 		}
+		if cfg.Sink.GroupID == "" {
+			cfg.Sink.GroupID = "servicenow-kafka-bridge-sink"
+		}
+		if cfg.Sink.CommitOnPartialFailure == nil {
+			defaultCommit := true
+			cfg.Sink.CommitOnPartialFailure = &defaultCommit
+		}
 	}
 
 	// Observability defaults
@@ -307,6 +327,40 @@ func validate(cfg *Config) error {
 	if len(cfg.Kafka.Brokers) == 0 {
 		errs = append(errs, errors.New("kafka.brokers must contain at least one broker"))
 	}
+	if cfg.Kafka.TLS.Enabled {
+		if cfg.Kafka.TLS.CertFile == "" && cfg.Kafka.TLS.KeyFile != "" {
+			errs = append(errs, errors.New("kafka.tls.cert_file is required when key_file is set"))
+		}
+		if cfg.Kafka.TLS.KeyFile == "" && cfg.Kafka.TLS.CertFile != "" {
+			errs = append(errs, errors.New("kafka.tls.key_file is required when cert_file is set"))
+		}
+		for _, entry := range []struct {
+			name  string
+			value string
+		}{
+			{name: "kafka.tls.ca_cert", value: cfg.Kafka.TLS.CACert},
+			{name: "kafka.tls.cert_file", value: cfg.Kafka.TLS.CertFile},
+			{name: "kafka.tls.key_file", value: cfg.Kafka.TLS.KeyFile},
+		} {
+			if entry.value == "" {
+				continue
+			}
+			if _, err := os.Stat(entry.value); err != nil {
+				errs = append(errs, fmt.Errorf("%s not found: %s", entry.name, entry.value))
+			}
+		}
+	}
+	if cfg.Kafka.SASL.Mechanism != "" {
+		mech := strings.ToUpper(cfg.Kafka.SASL.Mechanism)
+		switch mech {
+		case "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512":
+		default:
+			errs = append(errs, fmt.Errorf("kafka.sasl.mechanism must be PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512, got %q", cfg.Kafka.SASL.Mechanism))
+		}
+		if cfg.Kafka.SASL.Username == "" || cfg.Kafka.SASL.Password == "" {
+			errs = append(errs, errors.New("kafka.sasl.username and kafka.sasl.password are required when sasl.mechanism is set"))
+		}
+	}
 
 	// Source
 	if cfg.Source.Enabled {
@@ -341,6 +395,9 @@ func validate(cfg *Config) error {
 	if cfg.Sink.Enabled {
 		if len(cfg.Sink.Topics) == 0 {
 			errs = append(errs, errors.New("sink.topics must contain at least one topic when sink is enabled"))
+		}
+		if cfg.Sink.GroupID == "" {
+			errs = append(errs, errors.New("sink.group_id is required when sink is enabled"))
 		}
 	}
 

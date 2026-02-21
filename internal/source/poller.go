@@ -83,6 +83,7 @@ import (
 
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/kafka"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/observability"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/offset"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/partition"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
@@ -97,7 +98,7 @@ import (
 //
 //   - Configurable timestamp delay to handle clock skew.
 //   - Context-based cancellation for graceful shutdown.
-//   - Metrics integration (planned).
+//   - Metrics integration.
 type Poller struct {
 	// Table configuration
 	table           config.TableConfig
@@ -238,6 +239,8 @@ func (p *Poller) Run(ctx context.Context) error {
 //  2. Call GetRecords on the ServiceNow client.
 //  3. Process each record: serialize, produce, update offset.
 func (p *Poller) pollOnce(ctx context.Context) (bool, error) {
+	start := time.Now()
+	defer observability.Metrics.SourcePollDuration.WithLabelValues(p.table.Name).Observe(time.Since(start).Seconds())
 	query := p.buildQuery()
 
 	records, err := p.snClient.GetRecords(
@@ -249,12 +252,15 @@ func (p *Poller) pollOnce(ctx context.Context) (bool, error) {
 		p.table.Fields,
 	)
 	if err != nil {
+		observability.Metrics.SourceErrorsTotal.WithLabelValues(p.table.Name, "fetch").Inc()
 		return false, fmt.Errorf("fetching records: %w", err)
 	}
 
 	if len(records) == 0 {
 		return false, nil
 	}
+
+	observability.Metrics.SourceRecordsTotal.WithLabelValues(p.table.Name).Add(float64(len(records)))
 
 	p.logger.Info("fetched records", "count", len(records))
 
@@ -266,6 +272,7 @@ func (p *Poller) pollOnce(ctx context.Context) (bool, error) {
 
 	// Persist the offset after all records in this batch have been produced.
 	if err := p.store.Set(p.table.Name, p.currentOffset); err != nil {
+		observability.Metrics.SourceErrorsTotal.WithLabelValues(p.table.Name, "offset_store").Inc()
 		return false, fmt.Errorf("storing offset: %w", err)
 	}
 
@@ -288,19 +295,24 @@ func (p *Poller) processRecord(ctx context.Context, record servicenow.Record) er
 		// Use Avro serialization.
 		subject := p.table.Topic + "-value"
 		if err := p.producer.ProduceAvroSync(ctx, p.table.Topic, subject, p.avroSchema, record, headers); err != nil {
+			observability.Metrics.SourceErrorsTotal.WithLabelValues(p.table.Name, "produce_avro").Inc()
 			return fmt.Errorf("producing avro record: %w", err)
 		}
+		observability.Metrics.SourceProduceTotal.WithLabelValues(p.table.Name, p.table.Topic).Inc()
 	} else {
-		// Fallback to standard JSON serialization.
+		// Serialize the record to JSON for the Kafka message value.
 		value, err := json.Marshal(record)
 		if err != nil {
+			observability.Metrics.SourceErrorsTotal.WithLabelValues(p.table.Name, "marshal").Inc()
 			return fmt.Errorf("marshaling record: %w", err)
 		}
 
 		// Synchronous produce — blocks until broker acknowledges.
 		if err := p.producer.ProduceSync(ctx, p.table.Topic, key, value, headers); err != nil {
+			observability.Metrics.SourceErrorsTotal.WithLabelValues(p.table.Name, "produce").Inc()
 			return fmt.Errorf("producing record: %w", err)
 		}
+		observability.Metrics.SourceProduceTotal.WithLabelValues(p.table.Name, p.table.Topic).Inc()
 	}
 
 	// Extract the timestamp and identifier from the record for offset tracking.
@@ -325,6 +337,8 @@ func (p *Poller) updateOffset(record servicenow.Record) {
 		// ServiceNow returns timestamps in "YYYY-MM-DD HH:MM:SS" format.
 		if t, err := time.Parse("2006-01-02 15:04:05", tsStr); err == nil {
 			p.currentOffset.Timestamp = t.Unix()
+			lagSeconds := time.Since(t).Seconds()
+			observability.Metrics.OffsetLagSeconds.WithLabelValues(p.table.Name).Set(lagSeconds)
 		} else {
 			p.logger.Warn("failed to parse timestamp",
 				"field", p.timestampField,

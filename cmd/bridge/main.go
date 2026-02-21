@@ -209,6 +209,7 @@ func run(ctx context.Context, configPath string, logger *slog.Logger) error {
 
 	// 1. Start the observability server (always runs).
 	obsSrv := observability.NewServer(cfg.Observability.Addr, logger)
+	defer obsSrv.SetReady(false)
 
 	// 2. Initialize the offset store.
 	store, err := offset.NewFileStore(cfg.Offset.FilePath)
@@ -290,7 +291,7 @@ func run(ctx context.Context, configPath string, logger *slog.Logger) error {
 			topicCfg := topicCfg // capture loop variable
 			consumer, err := kafka.NewConsumer(
 				cfg.Kafka,
-				"servicenow-kafka-bridge-sink",
+				cfg.Sink.GroupID,
 				[]string{topicCfg.Topic},
 				logger,
 			)

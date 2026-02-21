@@ -61,6 +61,7 @@ import (
 	"time"
 
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/observability"
 	"golang.org/x/time/rate"
 )
 
@@ -313,6 +314,8 @@ func (c *httpClient) buildTableURL(table, query string, offset, limit int, field
 //  7. On 5xx or network error: exponential backoff with jitter
 //  8. On 4xx (other): return error immediately (non-retryable)
 func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte, error) {
+	method := req.Method
+	endpoint := req.URL.Path
 	backoff := c.initialBackoff
 	maxAttempts := c.maxRetries
 	if maxAttempts < 0 {
@@ -323,12 +326,14 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 	for attempt := 0; attempt <= maxAttempts; attempt++ {
 		// Check context before each attempt.
 		if err := ctx.Err(); err != nil {
+			observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, "context_canceled").Inc()
 			return nil, fmt.Errorf("request cancelled: %w", err)
 		}
 
 		// Apply rate limiting if configured.
 		if c.limiter != nil {
 			if err := c.limiter.Wait(ctx); err != nil {
+				observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, "rate_limited").Inc()
 				return nil, fmt.Errorf("rate limiter wait: %w", err)
 			}
 		}
@@ -337,6 +342,7 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 		token, err := c.auth.Token(ctx)
 		if err != nil {
 			lastErr = fmt.Errorf("getting auth token: %w", err)
+			observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, "auth").Inc()
 			continue
 		}
 		// Clone request to avoid mutating the original on retry.
@@ -345,9 +351,13 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 
 		// If the request has a body, we need to re-create it for retries.
 		// For GET requests this is nil, for POST/PATCH we need the original body.
+		requestStart := time.Now()
 		resp, err := c.http.Do(reqClone)
+		observability.Metrics.SNAPIRequestsTotal.WithLabelValues(method, endpoint).Inc()
+		observability.Metrics.SNAPILatency.WithLabelValues(method, endpoint).Observe(time.Since(requestStart).Seconds())
 		if err != nil {
 			lastErr = fmt.Errorf("HTTP request failed: %w", err)
+			observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, "network").Inc()
 			c.logger.Warn("request failed, will retry",
 				"attempt", attempt+1,
 				"error", err,
@@ -380,6 +390,7 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 			if refreshErr := c.auth.ForceRefresh(ctx); refreshErr != nil {
 				c.logger.Error("token refresh failed", "error", refreshErr)
 			}
+			observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, "401").Inc()
 			lastErr = fmt.Errorf("received 401 Unauthorized: %s", truncateBody(body))
 			// Retry immediately — do NOT apply backoff.
 			continue
@@ -391,6 +402,7 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 				"retry_after", retryAfter,
 				"attempt", attempt+1,
 			)
+			observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, "429").Inc()
 			lastErr = fmt.Errorf("received 429 Too Many Requests")
 			c.sleepWithJitter(ctx, retryAfter)
 			continue
@@ -398,6 +410,7 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 		case resp.StatusCode >= 500:
 			// Server error — retry with backoff.
 			lastErr = fmt.Errorf("received %d: %s", resp.StatusCode, truncateBody(body))
+			observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, fmt.Sprintf("%d", resp.StatusCode)).Inc()
 			c.logger.Warn("server error, will retry",
 				"status", resp.StatusCode,
 				"attempt", attempt+1,
@@ -409,6 +422,7 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 
 		default:
 			// 4xx (non-401, non-429) — fatal, do not retry.
+			observability.Metrics.SNAPIErrorsTotal.WithLabelValues(method, fmt.Sprintf("%d", resp.StatusCode)).Inc()
 			return nil, fmt.Errorf("non-retryable error %d: %s", resp.StatusCode, truncateBody(body))
 		}
 	}

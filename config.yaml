@@ -68,6 +68,9 @@ source:
 
 sink:
   enabled: false
+  # group_id: servicenow-kafka-bridge-sink
+  # commit_on_partial_failure: true
+  # dlq_topic: servicenow.dlq
   # topics:
   #   - topic: servicenow.incident.sink
   #     table: incident

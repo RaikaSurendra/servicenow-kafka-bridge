@@ -52,29 +52,53 @@ source:
 4.  **fields**: (Optional) List of specific fields to fetch. If empty, all fields are returned.
 5.  **partitioner**: Choose `default`, `round_robin`, or `field_based`.
 
-### 2.3 Sink Pipeline (`sink:`)
+### 2.3 Kafka Connection (`kafka:`)
+
+Kafka connection settings used by both source and sink pipelines.
+
+```yaml
+kafka:
+  brokers:
+    - "localhost:9092"
+  # tls:
+  #   enabled: false
+  #   ca_cert: /path/to/ca.pem
+  #   cert_file: /path/to/cert.pem
+  #   key_file: /path/to/key.pem
+  # sasl:
+  #   mechanism: PLAIN  # PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+  #   username: kafka-user
+  #   password: kafka-password
+  # schema_registry_url: "http://registry:8081"
+```
+
+### 2.4 Sink Pipeline (`sink:`)
 
 The sink pipeline consumes from Kafka and writes to ServiceNow.
 
 ```yaml
 sink:
   enabled: true
-  bootstrap_servers: ["localhost:9092"]
-  group_id: "sn-bridge-sink"
-  topics: ["sn.incident"]
-  table_map:
-    "sn.incident": "incident"
+  group_id: "servicenow-kafka-bridge-sink"
+  concurrency: 5
+  commit_on_partial_failure: true
+  dlq_topic: "servicenow.dlq" # optional
+  topics:
+    - topic: "servicenow.incident"
+      table: "incident"
 ```
 
 ---
 
 ## 3. Environment Variable Overrides
 
-Any value in the YAML can be overridden using the following naming convention:
+Any value in the YAML can be overridden using environment variables with `${VAR_NAME}` placeholders in `config.yaml`.
+Common variables used in the default config and docker-compose are:
 -   `SN_BASE_URL` -> `servicenow.base_url`
 -   `SN_OAUTH_CLIENT_ID` -> `servicenow.auth.oauth.client_id`
+-   `SN_OAUTH_CLIENT_SECRET` -> `servicenow.auth.oauth.client_secret`
+-   `SN_OAUTH_USERNAME` -> `servicenow.auth.oauth.username`
 -   `SN_OAUTH_PASSWORD` -> `servicenow.auth.oauth.password`
--   `KAFKA_BOOTSTRAP_SERVERS` -> `kafka.bootstrap_servers`
 
 ---
 
@@ -84,10 +108,10 @@ The bridge tracks its progress in an offset store. By default, it uses a file-ba
 
 ```yaml
 offset:
-  type: "file"
-  file:
-    path: "data/offsets.json"
-    flush_interval: 5s
+  storage: "file"            # "file" or "kafka"
+  file_path: "data/offsets.json"
+  kafka_topic: "_bridge_offsets"
+  flush_interval: 5s
 ```
 
 **Note**: Ensure the directory `data/` is writable by the user running the bridge.

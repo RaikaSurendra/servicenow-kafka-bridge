@@ -39,7 +39,8 @@ graph LR
 **Key Features:**
 
 * **Idempotent Updates**: Uses `sys_id` to determine if a record should be inserted (`POST`) or updated (`PATCH`).
-* **Batch Processing**: Processes Kafka batches before committing offsets to the broker.
+* **Concurrent Workers**: Uses an `errgroup` worker pool to allow parallel writes to ServiceNow per-topic, overcoming REST API latency.
+* **Dead Letter Queue (DLQ)**: Failed writes are routed to a specialized Kafka topic with error metadata, enabling non-blocking operation and later recovery.
 
 ---
 
@@ -98,3 +99,16 @@ The bridge exposes a Prometheus metrics endpoint on a dedicated HTTP server:
 | **ServiceNow 5xx** | Exponential backoff (initial 100ms, max 30s) + jitter. |
 | **Kafka Broker Unavail** | Block producer/consumer and retry with franz-go internal retries. |
 | **Process Crash** | Resume from last flushed offset (at-least-once). |
+| **Config Change** | `fsnotify` triggers a graceful soft-restart of all pollers/workers. |
+
+---
+
+## 5. Advanced Features
+
+### 5.1 Data Governance (Avro)
+
+The bridge integrates with the Confluent Schema Registry. It dynamically generates Avro schemas for ServiceNow tables and serializes data using the Confluent Wire Format (Wire ID + Avro payload).
+
+### 5.2 Hot-Reload
+
+The configuration watcher monitors `config.yaml`. On update, it cancels the active processing context, waits for components to stop, reloads the config, and restarts the bridge pipelines without restarting the container.
