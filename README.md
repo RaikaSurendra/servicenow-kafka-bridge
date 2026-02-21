@@ -1,6 +1,6 @@
 # ServiceNow-Kafka Bridge
 
-[![CI](https://github.com/RaikaSurendra/servicenow-kafka-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/RaikaSurendra/servicenow-kafka-bridge/actions/workflows/ci.yml)
+[![CI](https://github.com/RaikaSurendra/servicenow-kafka-bridge/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/RaikaSurendra/servicenow-kafka-bridge/actions/workflows/ci.yml)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/RaikaSurendra/servicenow-kafka-bridge)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/RaikaSurendra/servicenow-kafka-bridge)](https://goreportcard.com/report/github.com/RaikaSurendra/servicenow-kafka-bridge)
