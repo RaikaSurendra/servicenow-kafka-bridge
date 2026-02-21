@@ -1,6 +1,40 @@
 # ServiceNow-Kafka Bridge
 
+[![CI](https://github.com/RaikaSurendra/servicenow-kafka-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/RaikaSurendra/servicenow-kafka-bridge/actions/workflows/ci.yml)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/RaikaSurendra/servicenow-kafka-bridge)](https://go.dev/)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/RaikaSurendra/servicenow-kafka-bridge)](https://goreportcard.com/report/github.com/RaikaSurendra/servicenow-kafka-bridge)
+
 A high-performance, resilient Go binary for bidirectional data synchronization between ServiceNow and Kafka. This project serves as a modern replacement for the legacy IBM Kafka Connect ServiceNow connector.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph ServiceNow
+        SN_API[Table API]
+    end
+
+    subgraph Bridge["ServiceNow-Kafka Bridge"]
+        direction TB
+        SRC[Source Poller] -->|Produce| KP[Kafka Producer]
+        KC[Kafka Consumer] -->|Consume| SINK[Sink Worker]
+        OBS[Prometheus /metrics]
+        HP[Health /healthz /readyz]
+    end
+
+    subgraph Kafka
+        TOPIC_SRC[Source Topics]
+        TOPIC_SINK[Sink Topics]
+        DLQ[DLQ Topic]
+    end
+
+    SN_API -- poll records --> SRC
+    KP --> TOPIC_SRC
+    TOPIC_SINK --> KC
+    SINK -- insert/update --> SN_API
+    SINK -.-> DLQ
+```
 
 ## 🚀 Features
 
@@ -55,6 +89,10 @@ Run the exhaustive test suite with race detection:
 go test -race -v ./...
 ```
 
+## 🤝 Contributing
+
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## ⚖️ License
 
-This project is licensed under the Apache License 2.0.
+This project is licensed under the [Apache License 2.0](LICENSE).
