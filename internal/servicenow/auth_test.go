@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 )
 
 func testLogger() *slog.Logger {

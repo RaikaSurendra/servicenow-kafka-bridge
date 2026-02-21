@@ -3,7 +3,7 @@ package sink
 import (
 	"testing"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/servicenow"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
 )
 
 func TestExtractSysID_Present(t *testing.T) {

@@ -39,7 +39,7 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 )
 
 // Producer wraps a franz-go client for producing messages to Kafka.

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 )
 
 // mockAuth is a test authenticator that returns a fixed token.

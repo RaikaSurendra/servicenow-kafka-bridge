@@ -45,13 +45,13 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
-	"github.com/your-org/servicenow-kafka-bridge/internal/kafka"
-	"github.com/your-org/servicenow-kafka-bridge/internal/observability"
-	"github.com/your-org/servicenow-kafka-bridge/internal/offset"
-	"github.com/your-org/servicenow-kafka-bridge/internal/servicenow"
-	"github.com/your-org/servicenow-kafka-bridge/internal/sink"
-	"github.com/your-org/servicenow-kafka-bridge/internal/source"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/kafka"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/observability"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/offset"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/sink"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/source"
 )
 
 // Build-time variables injected via ldflags.

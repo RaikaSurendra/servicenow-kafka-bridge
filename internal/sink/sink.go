@@ -62,9 +62,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
-	kafkapkg "github.com/your-org/servicenow-kafka-bridge/internal/kafka"
-	"github.com/your-org/servicenow-kafka-bridge/internal/servicenow"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
+	kafkapkg "github.com/RaikaSurendra/servicenow-kafka-bridge/internal/kafka"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
 )
 
 // Worker consumes messages from a Kafka topic and writes them to a

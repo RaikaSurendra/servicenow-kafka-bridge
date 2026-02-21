@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
-	"github.com/your-org/servicenow-kafka-bridge/internal/offset"
-	"github.com/your-org/servicenow-kafka-bridge/internal/servicenow"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/offset"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
 )
 
 // TestBuildUnboundedQuery verifies the query generated for the first poll

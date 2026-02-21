@@ -52,7 +52,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 )
 
 // Authenticator provides authentication tokens for ServiceNow API requests.

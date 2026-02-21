@@ -1,4 +1,4 @@
-module github.com/your-org/servicenow-kafka-bridge
+module github.com/RaikaSurendra/servicenow-kafka-bridge
 
 go 1.24.1
 

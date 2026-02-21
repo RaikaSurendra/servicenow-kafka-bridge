@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
-	"github.com/your-org/servicenow-kafka-bridge/internal/servicenow"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
 )
 
 func TestDefaultPartitioner_KeyFromSysID(t *testing.T) {

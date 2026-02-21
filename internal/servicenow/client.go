@@ -60,7 +60,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/your-org/servicenow-kafka-bridge/internal/config"
+	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 	"golang.org/x/time/rate"
 )
 
