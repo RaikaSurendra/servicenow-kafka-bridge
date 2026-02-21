@@ -10,14 +10,13 @@
 // Each offset consists of two fields:
 //
 //   - Timestamp: The sys_updated_on (or equivalent) value of the last record.
-//     Stored as Unix epoch seconds, matching the Java reference.
+//     Stored as Unix epoch seconds.
 //
 //   - LastIdentifier: The sys_id (or equivalent) of the last record processed
 //     at that timestamp. Required because multiple records may share the same
 //     timestamp — the identifier breaks the tie and prevents duplicates.
 //
-// This two-field design is a direct port of the Java TimestampSourceOffset.java
-// from the IBM kafka-connect-servicenow connector.
+// This two-field design ensures precise resumption after restarts.
 //
 // # Ordering Guarantee
 //
@@ -40,8 +39,7 @@
 //
 //   - [KafkaStore]: Writes offsets to a Kafka compacted topic. Suitable for
 //     distributed deployments where the bridge may run on different hosts.
-//     (Planned for Phase 5 — currently only the interface and file store are
-//     provided.)
+//     (Planned — currently only the interface and file store are provided.)
 //
 // # Thread Safety
 //
@@ -62,11 +60,10 @@ import (
 // allowing the poller to construct bounded queries that resume exactly where
 // the previous poll cycle left off.
 //
-// This is the Go equivalent of TimestampSourceOffset.java from the Java reference.
+// It tracks the last seen timestamp and identifier for bounded query construction.
 type Offset struct {
 	// Timestamp is the sys_updated_on value of the last processed record,
-	// stored as Unix epoch seconds. This matches the Java reference which
-	// stores Instant.getEpochSecond().
+	// stored as Unix epoch seconds.
 	Timestamp int64 `json:"timestamp"`
 
 	// LastIdentifier is the sys_id (or configured identifier field) of the

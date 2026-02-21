@@ -1,7 +1,4 @@
 // Package servicenow provides a ServiceNow Table API query builder.
-//
-// This is a faithful port of the Java TableAPIQueryBuilder.java from the IBM
-// kafka-connect-servicenow connector.
 package servicenow
 
 import (

@@ -24,10 +24,6 @@
 //	│ 4xx (other)         │ Fatal — return error immediately, do not retry  │
 //	└─────────────────────┴─────────────────────────────────────────────────┘
 //
-// This is a significant improvement over the Java reference implementation
-// (ServiceNowTableApiClient.java) which uses a fixed backoff for all error
-// types and does not handle 429 responses.
-//
 // # URL Construction
 //
 // APIs are called at: {BaseURL}{TableAPIPath}/{tableName}?sysparm_query=...
@@ -154,8 +150,7 @@ func (c *httpClient) Close() {}
 
 // GetRecords queries a ServiceNow table using the Table API.
 //
-// This is the Go equivalent of ServiceNowTableApiClient.getRecords() from
-// the Java reference. URL construction follows the same pattern:
+// URL construction follows the ServiceNow Table API pattern:
 //
 //	GET {baseURL}/api/now/table/{table}?sysparm_query=...&sysparm_limit=...
 //
@@ -294,9 +289,6 @@ func (c *httpClient) buildTableURL(table, query string, offset, limit int, field
 }
 
 // doWithRetry executes an HTTP request with the configured retry strategy.
-//
-// This is the Go equivalent of ServiceNowTableApiClient.sendWithRetry() from
-// the Java reference (lines 158-225), with significant improvements:
 //
 //   - Exponential backoff with jitter instead of fixed delay
 //   - Distinct handling for 401, 429, 4xx, and 5xx responses

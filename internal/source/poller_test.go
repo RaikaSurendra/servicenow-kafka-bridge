@@ -34,7 +34,7 @@ func TestBuildUnboundedQuery(t *testing.T) {
 }
 
 // TestBuildBoundedQuery verifies the two-clause bounded query generated
-// when an offset exists. This must exactly match the Java reference.
+// when an offset exists.
 func TestBuildBoundedQuery(t *testing.T) {
 	from := time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC)
 

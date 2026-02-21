@@ -19,7 +19,7 @@
 //	│              │     │  4. Update offset  │     │              │
 //	└──────────────┘     └───────────────────┘     └──────────────┘
 //
-// # Query Logic (Port from TableAPISubTask.java)
+// # Query Logic
 //
 // The poller constructs two types of queries depending on whether an offset exists:
 //
@@ -93,8 +93,7 @@ import (
 // Poller continuously polls a single ServiceNow table and publishes
 // new/updated records to a Kafka topic. Each table gets its own Poller.
 //
-// The Poller implements the exact same query and batch processing logic
-// as TableAPISubTask.java from the Java reference, with improvements:
+// Key design features:
 //
 //   - Configurable timestamp delay to handle clock skew.
 //   - Context-based cancellation for graceful shutdown.
@@ -216,7 +215,7 @@ func (p *Poller) Run(ctx context.Context) error {
 		}
 
 		// Choose the next poll interval based on whether we found records.
-		// This is the same logic as TableAPISubTask.java:
+		// Adaptive polling:
 		//   - Records found → poll quickly (there may be more).
 		//   - No records → back off (avoid unnecessary API calls).
 		interval := p.slowPollInterval
@@ -326,7 +325,7 @@ func (p *Poller) processRecord(ctx context.Context, record servicenow.Record) er
 // and updates the in-memory offset.
 //
 // The timestamp is parsed from the ServiceNow datetime format (YYYY-MM-DD HH:MM:SS)
-// and stored as Unix epoch seconds, matching the Java TimestampSourceOffset.
+// and stored as Unix epoch seconds.
 func (p *Poller) updateOffset(record servicenow.Record) {
 	// Extract the identifier (typically sys_id).
 	if idVal, ok := record[p.identifierField]; ok {
@@ -353,7 +352,6 @@ func (p *Poller) updateOffset(record servicenow.Record) {
 
 // buildQuery constructs the ServiceNow query based on the current offset state.
 //
-// This is a faithful port of TableAPISubTask.buildQuery() from the Java reference.
 // See the package documentation for detailed query structure.
 func (p *Poller) buildQuery() *servicenow.QueryBuilder {
 	fromTime := p.getFromDateTimeUTC()
@@ -402,7 +400,7 @@ func (p *Poller) buildBoundedQuery(from, through time.Time) *servicenow.QueryBui
 		clause1.WhereGreaterThan(p.identifierField, p.currentOffset.LastIdentifier)
 	}
 
-	// Filter out records with no identifier (safety check from Java reference).
+	// Filter out records with no identifier.
 	clause1.WhereIsNotEmpty(p.identifierField)
 
 	// Clause 2: Open interval for newer records.

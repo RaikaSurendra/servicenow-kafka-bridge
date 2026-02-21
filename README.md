@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/RaikaSurendra/servicenow-kafka-bridge)](https://goreportcard.com/report/github.com/RaikaSurendra/servicenow-kafka-bridge)
 
-A high-performance, resilient Go binary for bidirectional data synchronization between ServiceNow and Kafka. This project serves as a modern replacement for the legacy IBM Kafka Connect ServiceNow connector.
+A high-performance, resilient Go binary for bidirectional data synchronization between ServiceNow and Kafka.
 
 ## Architecture
 

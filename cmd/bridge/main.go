@@ -1,8 +1,7 @@
 // ServiceNow-Kafka Bridge
 //
-// A standalone Go binary that replaces the IBM kafka-connect-servicenow Java
-// connector. It provides bidirectional data flow between ServiceNow tables and
-// Kafka topics:
+// A standalone Go binary that provides bidirectional data flow between
+// ServiceNow tables and Kafka topics:
 //
 //	Source:  ServiceNow Table API  →  Kafka Topics
 //	Sink:   Kafka Topics          →  ServiceNow Table API

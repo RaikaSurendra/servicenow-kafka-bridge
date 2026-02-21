@@ -13,9 +13,8 @@
 //
 // # Token Lifecycle (OAuth)
 //
-// The original Java connector only refreshes tokens reactively — when a 401
-// response is received. This Go implementation improves on that by running a
-// background goroutine that proactively refreshes the token before it expires:
+// The bridge proactively refreshes the token before it expires using a
+// background goroutine, avoiding 401-induced latency spikes:
 //
 //	┌─────────────┐      ┌──────────────────┐     ┌──────────────┐
 //	│ Token Issued │─────▶│ Valid (in-flight  │────▶│ Refresh at   │
@@ -302,15 +301,12 @@ func (o *OAuthAuthenticator) refreshLoop(ctx context.Context) {
 // doRefresh performs the actual OAuth token request. It acquires a write lock
 // before updating the stored token, ensuring that concurrent Token() calls
 // either see the old (still-valid) token or the new one, never a partial state.
-//
-// This is the Go equivalent of ServiceNowTableApiClient.getAuthenticationToken()
-// from the Java reference implementation (lines 316-361).
 func (o *OAuthAuthenticator) doRefresh(ctx context.Context) error {
 	tokenURL := o.baseURL + o.tokenPath
 
 	// Build the form body for the OAuth password grant request.
 	// ServiceNow expects: grant_type=password, client_id, client_secret,
-	// username, password — exactly matching the Java implementation.
+	// username, password — as required by the ServiceNow OAuth password grant.
 	form := url.Values{
 		"grant_type":    {"password"},
 		"client_id":     {o.clientID},

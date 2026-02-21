@@ -163,7 +163,7 @@ func TestSanitizeMultipleCarets(t *testing.T) {
 }
 
 func TestUnion(t *testing.T) {
-	// Port of the bounded query pattern from TableAPISubTask.java
+	// Bounded query pattern with two clauses unioned by ^NQ
 	from := time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC)
 	through := time.Date(2024, 3, 15, 10, 30, 0, 0, time.UTC)
 	lastID := "abc123"
@@ -203,7 +203,7 @@ func TestUnion(t *testing.T) {
 }
 
 func TestUnboundedQuery(t *testing.T) {
-	// Port of buildQueryUnboundedQuery from TableAPISubTask.java
+	// Unbounded query: fetch all records ordered by timestamp and identifier
 	q := NewQueryBuilder().
 		WhereIsNotEmpty("sys_id").
 		OrderByAsc("sys_updated_on").
