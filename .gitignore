@@ -18,7 +18,7 @@
 .local/
 data/
 offsets.json
-bridge
+/bridge
 bridge.exe
 
 # IDEs
