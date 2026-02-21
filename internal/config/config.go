@@ -60,9 +60,10 @@ type BasicConfig struct {
 
 // KafkaConfig holds kafka broker and security settings.
 type KafkaConfig struct {
-	Brokers []string   `yaml:"brokers"`
-	TLS     TLSConfig  `yaml:"tls"`
-	SASL    SASLConfig `yaml:"sasl"`
+	Brokers           []string   `yaml:"brokers"`
+	TLS               TLSConfig  `yaml:"tls"`
+	SASL              SASLConfig `yaml:"sasl"`
+	SchemaRegistryURL string     `yaml:"schema_registry_url"`
 }
 
 // TLSConfig enables TLS for Kafka connections.
@@ -105,8 +106,10 @@ type TableConfig struct {
 
 // SinkConfig controls the sink (Kafka → ServiceNow) pipeline.
 type SinkConfig struct {
-	Enabled bool              `yaml:"enabled"`
-	Topics  []SinkTopicConfig `yaml:"topics"`
+	Enabled     bool              `yaml:"enabled"`
+	Topics      []SinkTopicConfig `yaml:"topics"`
+	Concurrency int               `yaml:"concurrency"`
+	DLQTopic    string            `yaml:"dlq_topic"`
 }
 
 // SinkTopicConfig maps a Kafka topic to a ServiceNow table.
@@ -247,6 +250,13 @@ func applyDefaults(cfg *Config) {
 	}
 	if off.FlushInterval.Duration == 0 {
 		off.FlushInterval.Duration = 5 * time.Second
+	}
+
+	// Sink defaults
+	if cfg.Sink.Enabled {
+		if cfg.Sink.Concurrency <= 0 {
+			cfg.Sink.Concurrency = 5
+		}
 	}
 
 	// Observability defaults

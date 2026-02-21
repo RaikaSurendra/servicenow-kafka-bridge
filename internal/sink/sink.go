@@ -62,6 +62,8 @@ import (
 	"log/slog"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
 	kafkapkg "github.com/RaikaSurendra/servicenow-kafka-bridge/internal/kafka"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
@@ -70,22 +72,28 @@ import (
 // Worker consumes messages from a Kafka topic and writes them to a
 // ServiceNow table. One Worker is created per configured sink topic.
 type Worker struct {
+	sinkConfig  config.SinkConfig
 	topicConfig config.SinkTopicConfig
 	consumer    *kafkapkg.Consumer
+	producer    *kafkapkg.Producer // added for DLQ support
 	snClient    servicenow.Client
 	logger      *slog.Logger
 }
 
 // NewWorker creates a sink Worker for the given topic-table mapping.
 func NewWorker(
+	sinkCfg config.SinkConfig,
 	topicCfg config.SinkTopicConfig,
 	consumer *kafkapkg.Consumer,
+	producer *kafkapkg.Producer, // added for DLQ support
 	snClient servicenow.Client,
 	logger *slog.Logger,
 ) *Worker {
 	return &Worker{
+		sinkConfig:  sinkCfg,
 		topicConfig: topicCfg,
 		consumer:    consumer,
+		producer:    producer,
 		snClient:    snClient,
 		logger: logger.With(
 			"component", "sink-worker",
@@ -100,12 +108,13 @@ func NewWorker(
 //
 // Each iteration:
 //  1. Poll Kafka for a batch of records.
-//  2. For each record: deserialize, write to ServiceNow.
+//  2. For each record: deserialize, write to ServiceNow (concurrently).
 //  3. Commit Kafka offsets after all records in the batch are processed.
 func (w *Worker) Run(ctx context.Context) error {
 	w.logger.Info("starting sink worker",
 		"topic", w.topicConfig.Topic,
 		"table", w.topicConfig.Table,
+		"concurrency", w.sinkConfig.Concurrency,
 	)
 
 	for {
@@ -134,28 +143,41 @@ func (w *Worker) Run(ctx context.Context) error {
 
 		w.logger.Debug("received records from Kafka", "count", len(records))
 
-		// Process each record — write to ServiceNow.
-		successCount := 0
-		failCount := 0
+		// Process records concurrently using an errgroup with a limit.
+		g, gCtx := errgroup.WithContext(ctx)
+		g.SetLimit(w.sinkConfig.Concurrency)
+
 		for _, rec := range records {
-			if err := w.processRecord(ctx, rec.Value); err != nil {
-				w.logger.Error("failed to write record to ServiceNow",
-					"error", err,
-					"partition", rec.Partition,
-					"offset", rec.Offset,
-				)
-				failCount++
-				// Continue processing remaining records — don't block the batch.
-				continue
-			}
-			successCount++
+			rec := rec // capture loop variable
+			g.Go(func() error {
+				if err := w.processRecord(gCtx, rec.Value); err != nil {
+					w.logger.Error("failed to write record to ServiceNow",
+						"error", err,
+						"partition", rec.Partition,
+						"offset", rec.Offset,
+					)
+
+					// If DLQ is enabled, move the record to the DLQ topic.
+					if w.sinkConfig.DLQTopic != "" && w.producer != nil {
+						if dlqErr := w.moveToDLQ(gCtx, rec.Value, err); dlqErr != nil {
+							w.logger.Error("failed to move record to DLQ", "error", dlqErr)
+						} else {
+							w.logger.Info("record moved to DLQ", "topic", w.sinkConfig.DLQTopic)
+						}
+					}
+
+					// We return nil here because we want to continue processing other
+					// records in the batch even if one fails (logging the error instead).
+					return nil
+				}
+				return nil
+			})
 		}
 
-		w.logger.Info("batch processed",
-			"success", successCount,
-			"failed", failCount,
-			"total", len(records),
-		)
+		// Wait for all workers in the batch to complete.
+		_ = g.Wait()
+
+		w.logger.Debug("batch processed", "total", len(records))
 
 		// Commit offsets after processing the batch.
 		// Even if some records failed, we commit to avoid re-processing
@@ -211,4 +233,24 @@ func extractSysID(record servicenow.Record) (string, bool) {
 		return "", false
 	}
 	return sysID, true
+}
+
+// moveToDLQ wraps a failed record with error metadata and sends it to the DLQ topic.
+func (w *Worker) moveToDLQ(ctx context.Context, value []byte, err error) error {
+	// Wrap the original value with error info.
+	dlqMsg := map[string]interface{}{
+		"original_payload": string(value),
+		"error":            err.Error(),
+		"timestamp":        time.Now().Format(time.RFC3339),
+		"topic":            w.topicConfig.Topic,
+		"table":            w.topicConfig.Table,
+	}
+
+	dlqJSON, jerr := json.Marshal(dlqMsg)
+	if jerr != nil {
+		return fmt.Errorf("marshaling DLQ message: %w", jerr)
+	}
+
+	// Produce to DLQ topic synchronously.
+	return w.producer.ProduceSync(ctx, w.sinkConfig.DLQTopic, nil, dlqJSON, nil)
 }

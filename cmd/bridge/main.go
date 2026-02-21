@@ -43,6 +43,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
@@ -114,23 +115,98 @@ func main() {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		sig := <-sigCh
-		logger.Info("received shutdown signal", "signal", sig)
-		cancel()
-	}()
 
-	if err := run(ctx, cfg, logger); err != nil {
-		logger.Error("bridge exited with error", "error", err)
-		os.Exit(1)
+	// Setup config watcher for hot-reload.
+	reloadCh := make(chan struct{}, 1)
+	go watchConfig(ctx, *configPath, reloadCh, logger)
+
+	for {
+		// Create a sub-context for the current run.
+		runCtx, runCancel := context.WithCancel(ctx)
+
+		// Start the run in a goroutine so we can listen for signals/reloads.
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- run(runCtx, *configPath, logger)
+		}()
+
+		select {
+		case sig := <-sigCh:
+			logger.Info("received shutdown signal", "signal", sig)
+			runCancel()
+			cancel()
+			<-errCh // wait for run to exit
+			logger.Info("bridge shutdown complete")
+			return
+		case <-reloadCh:
+			logger.Info("reloading configuration...")
+			runCancel()
+			if err := <-errCh; err != nil && err != context.Canceled {
+				logger.Error("previous run exited with error on reload", "error", err)
+			}
+			logger.Info("restarting with new configuration")
+			// continue loop to restart
+		case err := <-errCh:
+			if err != nil && err != context.Canceled {
+				logger.Error("bridge exited with error", "error", err)
+				os.Exit(1)
+			}
+			logger.Info("bridge shutdown complete")
+			return
+		}
+	}
+}
+
+// watchConfig uses fsnotify to watch the config file for changes.
+func watchConfig(ctx context.Context, path string, reloadCh chan<- struct{}, logger *slog.Logger) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		logger.Error("failed to create config watcher", "error", err)
+		return
+	}
+	defer watcher.Close()
+
+	if err := watcher.Add(path); err != nil {
+		logger.Error("failed to watch config file", "path", path, "error", err)
+		return
 	}
 
-	logger.Info("bridge shutdown complete")
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			// Trigger a reload on Write or Rename/Create (some editors do this).
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				logger.Info("config file changed", "event", event.Name)
+				// Debounce: some editors write multiple times.
+				select {
+				case reloadCh <- struct{}{}:
+				default:
+					// already has a reload queued
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			logger.Error("config watcher error", "error", err)
+		}
+	}
 }
 
 // run is the main execution function, separated from main() for testability.
 // It sets up all components and runs them via errgroup.
-func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
+func run(ctx context.Context, configPath string, logger *slog.Logger) error {
+	// Load and validate configuration.
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("loading configuration from %s: %w", configPath, err)
+	}
+
 	// 1. Start the observability server (always runs).
 	obsSrv := observability.NewServer(cfg.Observability.Addr, logger)
 
@@ -174,7 +250,18 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	snClient := servicenow.NewClient(cfg.ServiceNow, auth, logger, clientOpts...)
 	defer snClient.Close()
 
-	// 5. Use errgroup for coordinated goroutine lifecycle.
+	// 5. Initialize Kafka Producer if needed (Source or Sink with DLQ).
+	var producer *kafka.Producer
+	if cfg.Source.Enabled || (cfg.Sink.Enabled && cfg.Sink.DLQTopic != "") {
+		var err error
+		producer, err = kafka.NewProducer(cfg.Kafka, logger)
+		if err != nil {
+			return fmt.Errorf("creating Kafka producer: %w", err)
+		}
+		defer producer.Close()
+	}
+
+	// 6. Use errgroup for coordinated goroutine lifecycle.
 	g, gCtx := errgroup.WithContext(ctx)
 
 	// Start observability server.
@@ -182,14 +269,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 		return obsSrv.Start(gCtx)
 	})
 
-	// 6. Start source pollers (ServiceNow → Kafka).
+	// 7. Start source pollers (ServiceNow → Kafka).
 	if cfg.Source.Enabled {
-		producer, err := kafka.NewProducer(cfg.Kafka, logger)
-		if err != nil {
-			return fmt.Errorf("creating Kafka producer: %w", err)
-		}
-		defer producer.Close()
-
 		for _, table := range cfg.Source.Tables {
 			table := table // capture loop variable
 			poller, err := source.NewPoller(table, cfg.Source, snClient, producer, store, logger)
@@ -218,7 +299,7 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			}
 			defer consumer.Close()
 
-			worker := sink.NewWorker(topicCfg, consumer, snClient, logger)
+			worker := sink.NewWorker(cfg.Sink, topicCfg, consumer, producer, snClient, logger)
 			g.Go(func() error {
 				return worker.Run(gCtx)
 			})

@@ -38,8 +38,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/config"
+	"github.com/hamba/avro/v2"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 // Producer wraps a franz-go client for producing messages to Kafka.
@@ -49,8 +50,9 @@ import (
 // throughput for durability, which is appropriate for a data bridge where
 // data loss is unacceptable.
 type Producer struct {
-	client *kgo.Client
-	logger *slog.Logger
+	client     *kgo.Client
+	serializer *AvroSerializer // added for Avro/Schema Registry support
+	logger     *slog.Logger
 }
 
 // NewProducer creates a Kafka producer from the bridge configuration.
@@ -70,9 +72,17 @@ func NewProducer(cfg config.KafkaConfig, logger *slog.Logger) (*Producer, error)
 		return nil, fmt.Errorf("creating Kafka producer client: %w", err)
 	}
 
+	var serializer *AvroSerializer
+	if cfg.SchemaRegistryURL != "" {
+		registry := NewHTTPRegistryClient(cfg.SchemaRegistryURL)
+		serializer = NewAvroSerializer(registry)
+		logger.Info("Avro serialization enabled with Schema Registry", "url", cfg.SchemaRegistryURL)
+	}
+
 	return &Producer{
-		client: client,
-		logger: logger.With("component", "kafka-producer"),
+		client:     client,
+		serializer: serializer,
+		logger:     logger.With("component", "kafka-producer"),
 	}, nil
 }
 
@@ -117,6 +127,26 @@ func (p *Producer) ProduceSync(ctx context.Context, topic string, key, value []b
 		"offset", results[0].Record.Offset,
 	)
 	return nil
+}
+
+// IsAvroEnabled returns true if the producer is configured with a schema registry.
+func (p *Producer) IsAvroEnabled() bool {
+	return p.serializer != nil
+}
+
+// ProduceAvroSync serializes a record using Avro and sends it to Kafka.
+// It uses the configured Schema Registry to fetch/register the schema.
+func (p *Producer) ProduceAvroSync(ctx context.Context, topic, subject string, avroSchema avro.Schema, record interface{}, headers map[string]string) error {
+	if p.serializer == nil {
+		return fmt.Errorf("avro serialization is not enabled (no schema registry url configured)")
+	}
+
+	value, err := p.serializer.Serialize(ctx, subject, avroSchema, record)
+	if err != nil {
+		return fmt.Errorf("avro serialization failed: %w", err)
+	}
+
+	return p.ProduceSync(ctx, topic, nil, value, headers)
 }
 
 // ProduceBatchSync sends multiple records to the specified Kafka topic and

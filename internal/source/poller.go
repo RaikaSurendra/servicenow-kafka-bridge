@@ -86,6 +86,7 @@ import (
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/offset"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/partition"
 	"github.com/RaikaSurendra/servicenow-kafka-bridge/internal/servicenow"
+	"github.com/hamba/avro/v2"
 )
 
 // Poller continuously polls a single ServiceNow table and publishes
@@ -116,6 +117,9 @@ type Poller struct {
 	store       offset.Store
 	partitioner partition.Partitioner
 	logger      *slog.Logger
+
+	// Avro support
+	avroSchema avro.Schema
 
 	// Runtime state
 	currentOffset offset.Offset
@@ -155,6 +159,21 @@ func NewPoller(
 			"topic", table.Topic,
 		),
 		currentOffset: off,
+	}
+
+	// Generate Avro schema if serialization is enabled.
+	if producer != nil && producer.IsAvroEnabled() {
+		// If fields are not specified, we can't generate a stable schema.
+		// In a real scenario, we might want to fetch all fields or use a default set.
+		fields := table.Fields
+		if len(fields) == 0 {
+			fields = []string{table.TimestampField, table.IdentifierField}
+		}
+		schema, err := kafka.GenerateAvroSchema(table.Name, fields)
+		if err != nil {
+			return nil, fmt.Errorf("generating avro schema for table %s: %w", table.Name, err)
+		}
+		p.avroSchema = schema
 	}
 
 	return p, nil
@@ -257,12 +276,6 @@ func (p *Poller) pollOnce(ctx context.Context) (bool, error) {
 // updates the in-memory offset. The offset is updated **only after** the
 // synchronous Kafka produce confirms receipt.
 func (p *Poller) processRecord(ctx context.Context, record servicenow.Record) error {
-	// Serialize the record to JSON for the Kafka message value.
-	value, err := json.Marshal(record)
-	if err != nil {
-		return fmt.Errorf("marshaling record: %w", err)
-	}
-
 	// Compute the partition key using the configured partitioner.
 	key := p.partitioner.Key(record)
 
@@ -271,11 +284,23 @@ func (p *Poller) processRecord(ctx context.Context, record servicenow.Record) er
 		"sn_table": p.table.Name,
 	}
 
-	// Synchronous produce — blocks until broker acknowledges.
-	// This is the critical at-least-once guarantee: we do NOT advance the
-	// offset until Kafka confirms the message was written.
-	if err := p.producer.ProduceSync(ctx, p.table.Topic, key, value, headers); err != nil {
-		return fmt.Errorf("producing record: %w", err)
+	if p.avroSchema != nil {
+		// Use Avro serialization.
+		subject := p.table.Topic + "-value"
+		if err := p.producer.ProduceAvroSync(ctx, p.table.Topic, subject, p.avroSchema, record, headers); err != nil {
+			return fmt.Errorf("producing avro record: %w", err)
+		}
+	} else {
+		// Fallback to standard JSON serialization.
+		value, err := json.Marshal(record)
+		if err != nil {
+			return fmt.Errorf("marshaling record: %w", err)
+		}
+
+		// Synchronous produce — blocks until broker acknowledges.
+		if err := p.producer.ProduceSync(ctx, p.table.Topic, key, value, headers); err != nil {
+			return fmt.Errorf("producing record: %w", err)
+		}
 	}
 
 	// Extract the timestamp and identifier from the record for offset tracking.
