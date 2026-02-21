@@ -165,7 +165,7 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 
 // MarshalYAML implements yaml.Marshaler for Duration.
 func (d Duration) MarshalYAML() (interface{}, error) {
-	return d.Duration.String(), nil
+	return d.String(), nil
 }
 
 // Load reads a YAML config file, expands environment variables, and validates.

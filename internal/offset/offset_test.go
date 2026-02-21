@@ -17,7 +17,7 @@ func TestNewFileStore_EmptyStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFileStore failed: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	off, err := store.Get("incident")
 	if err != nil {
@@ -75,7 +75,7 @@ func TestFileStore_SetGetFlush(t *testing.T) {
 		t.Errorf("on-disk timestamp = %d, want %d", onDisk["incident"].Timestamp, off.Timestamp)
 	}
 
-	store.Close()
+	_ = store.Close()
 }
 
 func TestFileStore_Persistence(t *testing.T) {
@@ -87,16 +87,16 @@ func TestFileStore_Persistence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store1.Set("incident", Offset{Timestamp: 1000, LastIdentifier: "id1"})
-	store1.Set("change_request", Offset{Timestamp: 2000, LastIdentifier: "id2"})
-	store1.Close() // writes to disk
+	_ = store1.Set("incident", Offset{Timestamp: 1000, LastIdentifier: "id1"})
+	_ = store1.Set("change_request", Offset{Timestamp: 2000, LastIdentifier: "id2"})
+	_ = store1.Close() // writes to disk
 
 	// Re-open and verify
 	store2, err := NewFileStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store2.Close()
+	defer func() { _ = store2.Close() }()
 
 	off1, _ := store2.Get("incident")
 	if off1.Timestamp != 1000 || off1.LastIdentifier != "id1" {
@@ -116,7 +116,7 @@ func TestFileStore_FlushNoDirtyNoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Flush with no changes — should not create the file
 	if err := store.Flush(); err != nil {
@@ -137,7 +137,7 @@ func TestFileStore_ConcurrentAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	var wg sync.WaitGroup
 	tables := []string{"t1", "t2", "t3", "t4", "t5"}
@@ -148,7 +148,7 @@ func TestFileStore_ConcurrentAccess(t *testing.T) {
 		go func(tbl string) {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				store.Set(tbl, Offset{
+				_ = store.Set(tbl, Offset{
 					Timestamp:      int64(i),
 					LastIdentifier: "id",
 				})
@@ -162,7 +162,7 @@ func TestFileStore_ConcurrentAccess(t *testing.T) {
 		go func(tbl string) {
 			defer wg.Done()
 			for i := 0; i < 100; i++ {
-				store.Get(tbl)
+				_, _ = store.Get(tbl)
 			}
 		}(table)
 	}
@@ -186,10 +186,10 @@ func TestFileStore_Snapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
-	store.Set("t1", Offset{Timestamp: 100, LastIdentifier: "a"})
-	store.Set("t2", Offset{Timestamp: 200, LastIdentifier: "b"})
+	_ = store.Set("t1", Offset{Timestamp: 100, LastIdentifier: "a"})
+	_ = store.Set("t2", Offset{Timestamp: 200, LastIdentifier: "b"})
 
 	snap := store.Snapshot()
 
@@ -231,7 +231,7 @@ func TestFileStore_AtomicWrite(t *testing.T) {
 	}
 
 	// Set and flush
-	store.Set("t1", Offset{Timestamp: 100, LastIdentifier: "a"})
+	_ = store.Set("t1", Offset{Timestamp: 100, LastIdentifier: "a"})
 	if err := store.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestFileStore_AtomicWrite(t *testing.T) {
 		}
 	}
 
-	store.Close()
+	_ = store.Close()
 }
 
 func TestNewFileStore_CorruptedFile(t *testing.T) {
@@ -252,7 +252,7 @@ func TestNewFileStore_CorruptedFile(t *testing.T) {
 	path := filepath.Join(dir, "offsets.json")
 
 	// Write invalid JSON
-	os.WriteFile(path, []byte("{invalid json"), 0644)
+	_ = os.WriteFile(path, []byte("{invalid json"), 0644)
 
 	_, err := NewFileStore(path)
 	if err == nil {

@@ -369,7 +369,7 @@ func (c *httpClient) doWithRetry(ctx context.Context, req *http.Request) ([]byte
 		}
 
 		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if readErr != nil {
 			lastErr = fmt.Errorf("reading response body: %w", readErr)
 			c.sleepWithJitter(ctx, backoff)

@@ -49,7 +49,7 @@ func (c *HTTPRegistryClient) GetSchemaID(ctx context.Context, subject string, sc
 	if err != nil {
 		return 0, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

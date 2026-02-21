@@ -62,7 +62,7 @@ func TestGetRecords_Success(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TableResponse{Result: records})
+		_ = json.NewEncoder(w).Encode(TableResponse{Result: records})
 	}))
 	defer srv.Close()
 
@@ -90,7 +90,7 @@ func TestGetRecords_WithFields(t *testing.T) {
 			t.Errorf("unexpected fields: %s", fields)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TableResponse{Result: []Record{}})
+		_ = json.NewEncoder(w).Encode(TableResponse{Result: []Record{}})
 	}))
 	defer srv.Close()
 
@@ -123,11 +123,11 @@ func TestGetRecords_Retry401(t *testing.T) {
 		n := atomic.AddInt32(&attempt, 1)
 		if n == 1 {
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"error":"unauthorized"}`))
+			_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TableResponse{Result: []Record{{"sys_id": "001"}}})
+		_ = json.NewEncoder(w).Encode(TableResponse{Result: []Record{{"sys_id": "001"}}})
 	}))
 	defer srv.Close()
 
@@ -154,11 +154,11 @@ func TestGetRecords_Retry5xx(t *testing.T) {
 		n := atomic.AddInt32(&attempt, 1)
 		if n <= 2 {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			w.Write([]byte("service unavailable"))
+			_, _ = w.Write([]byte("service unavailable"))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TableResponse{Result: []Record{{"sys_id": "001"}}})
+		_ = json.NewEncoder(w).Encode(TableResponse{Result: []Record{{"sys_id": "001"}}})
 	}))
 	defer srv.Close()
 
@@ -179,7 +179,7 @@ func TestGetRecords_Retry5xx(t *testing.T) {
 func TestGetRecords_Fatal4xx(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error":"bad request"}`))
+		_, _ = w.Write([]byte(`{"error":"bad request"}`))
 	}))
 	defer srv.Close()
 
@@ -204,11 +204,11 @@ func TestGetRecords_429RetryAfter(t *testing.T) {
 		if n == 1 {
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte("rate limited"))
+			_, _ = w.Write([]byte("rate limited"))
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TableResponse{Result: []Record{{"sys_id": "001"}}})
+		_ = json.NewEncoder(w).Encode(TableResponse{Result: []Record{{"sys_id": "001"}}})
 	}))
 	defer srv.Close()
 
@@ -237,7 +237,7 @@ func TestGetRecords_ContextCancellation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Second)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(TableResponse{Result: []Record{}})
+		_ = json.NewEncoder(w).Encode(TableResponse{Result: []Record{}})
 	}))
 	defer srv.Close()
 
@@ -265,7 +265,7 @@ func TestInsertRecord_Success(t *testing.T) {
 		}
 		result := Record{"sys_id": "new-001", "short_description": "Created"}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"result": result})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"result": result})
 	}))
 	defer srv.Close()
 
@@ -293,7 +293,7 @@ func TestUpdateRecord_Success(t *testing.T) {
 		}
 		result := Record{"sys_id": "abc123", "state": "2"}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"result": result})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"result": result})
 	}))
 	defer srv.Close()
 
@@ -314,7 +314,7 @@ func TestUpdateRecord_Success(t *testing.T) {
 func TestGetRecords_ExhaustsRetries(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("internal server error"))
+		_, _ = w.Write([]byte("internal server error"))
 	}))
 	defer srv.Close()
 

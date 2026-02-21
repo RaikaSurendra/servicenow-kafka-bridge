@@ -164,7 +164,7 @@ func watchConfig(ctx context.Context, path string, reloadCh chan<- struct{}, log
 		logger.Error("failed to create config watcher", "error", err)
 		return
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	if err := watcher.Add(path); err != nil {
 		logger.Error("failed to watch config file", "path", path, "error", err)
@@ -216,7 +216,7 @@ func run(ctx context.Context, configPath string, logger *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("initializing offset store: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Start a periodic offset flush goroutine.
 	flushCtx, flushCancel := context.WithCancel(ctx)

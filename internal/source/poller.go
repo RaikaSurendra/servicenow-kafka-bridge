@@ -240,7 +240,9 @@ func (p *Poller) Run(ctx context.Context) error {
 //  3. Process each record: serialize, produce, update offset.
 func (p *Poller) pollOnce(ctx context.Context) (bool, error) {
 	start := time.Now()
-	defer observability.Metrics.SourcePollDuration.WithLabelValues(p.table.Name).Observe(time.Since(start).Seconds())
+	defer func() {
+		observability.Metrics.SourcePollDuration.WithLabelValues(p.table.Name).Observe(time.Since(start).Seconds())
+	}()
 	query := p.buildQuery()
 
 	records, err := p.snClient.GetRecords(

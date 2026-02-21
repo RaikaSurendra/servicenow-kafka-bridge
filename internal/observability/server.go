@@ -173,7 +173,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.logger.Info("shutting down observability server")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		s.srv.Shutdown(shutdownCtx)
+		_ = s.srv.Shutdown(shutdownCtx)
 	}()
 
 	if err := s.srv.ListenAndServe(); err != http.ErrServerClosed {
@@ -193,7 +193,7 @@ func (s *Server) SetReady(ready bool) {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"status":"healthy"}`)
+	_, _ = fmt.Fprintf(w, `{"status":"healthy"}`)
 }
 
 // handleReady responds with 200 if ready, 503 if not yet ready.
@@ -201,9 +201,9 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if s.ready.Load() {
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, `{"status":"ready"}`)
+		_, _ = fmt.Fprintf(w, `{"status":"ready"}`)
 	} else {
 		w.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprintf(w, `{"status":"not_ready"}`)
+		_, _ = fmt.Fprintf(w, `{"status":"not_ready"}`)
 	}
 }
