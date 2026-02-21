@@ -1,0 +1,121 @@
+# ServiceNow-Kafka Bridge: Configuration Guide
+
+This guide provides step-by-step instructions for configuring the ServiceNow-Kafka Bridge for both Source (ServiceNow to Kafka) and Sink (Kafka to ServiceNow) pipelines.
+
+## 1. Prerequisites
+
+Before starting, ensure you have:
+-   **ServiceNow Credentials**: A user account with REST API access or a Client ID/Secret for OAuth.
+-   **Kafka Cluster**: Connection details (bootstrap servers) and access to create/write to topics.
+-   **Go Environment**: (Optional, if running natively) Go 1.24+ installed.
+
+---
+
+## 2. Configuration File Structure
+
+The bridge uses a `config.yaml` file. You can either edit this file directly or use environment variables to override values.
+
+### 2.1 ServiceNow Connection (`servicenow:`)
+
+| Field | Description | Example |
+| :--- | :--- | :--- |
+| `base_url` | Your ServiceNow instance URL. | `https://dev12345.service-now.com` |
+| `auth.type` | Authentication method: `oauth` or `basic`. | `oauth` |
+| `auth.oauth.client_id` | OAuth Client ID from ServiceNow. | `d0fb...` |
+| `auth.oauth.client_secret` | OAuth Client Secret. | `P@ss...` |
+| `auth.oauth.username` | Service account username. | `bridge_user` |
+| `auth.oauth.password` | Service account password. | `...` |
+
+### 2.2 Source Pipeline (`source:`)
+
+The source pipeline pulls data from ServiceNow and pushes to Kafka.
+
+```yaml
+source:
+  topic_prefix: "sn"
+  batch_size: 100
+  fast_poll_interval: 500ms
+  slow_poll_interval: 30s
+  tables:
+    - name: "incident"
+      timestamp_field: "sys_updated_on"
+      identifier_field: "sys_id"
+      fields: ["sys_id", "number", "short_description", "state"]
+      partitioner: "field_based"
+      partition_key_fields: ["sys_id"]
+```
+
+#### Step-by-Step Table Setup:
+1.  **name**: Exact ServiceNow table name (e.g., `incident`, `change_request`).
+2.  **timestamp_field**: The field used for incremental polling (usually `sys_updated_on`).
+3.  **identifier_field**: The unique ID field (usually `sys_id`).
+4.  **fields**: (Optional) List of specific fields to fetch. If empty, all fields are returned.
+5.  **partitioner**: Choose `default`, `round_robin`, or `field_based`.
+
+### 2.3 Sink Pipeline (`sink:`)
+
+The sink pipeline consumes from Kafka and writes to ServiceNow.
+
+```yaml
+sink:
+  enabled: true
+  bootstrap_servers: ["localhost:9092"]
+  group_id: "sn-bridge-sink"
+  topics: ["sn.incident"]
+  table_map:
+    "sn.incident": "incident"
+```
+
+---
+
+## 3. Environment Variable Overrides
+
+Any value in the YAML can be overridden using the following naming convention:
+-   `SN_BASE_URL` -> `servicenow.base_url`
+-   `SN_OAUTH_CLIENT_ID` -> `servicenow.auth.oauth.client_id`
+-   `SN_OAUTH_PASSWORD` -> `servicenow.auth.oauth.password`
+-   `KAFKA_BOOTSTRAP_SERVERS` -> `kafka.bootstrap_servers`
+
+---
+
+## 4. Offset Persistence
+
+The bridge tracks its progress in an offset store. By default, it uses a file-based store:
+
+```yaml
+offset:
+  type: "file"
+  file:
+    path: "data/offsets.json"
+    flush_interval: 5s
+```
+
+**Note**: Ensure the directory `data/` is writable by the user running the bridge.
+
+---
+
+## 5. Running the Bridge
+
+### Using Docker (Recommended)
+```bash
+docker compose up --build
+```
+
+### Running Natively
+```bash
+go run ./cmd/bridge -config config.yaml
+```
+
+---
+
+## 6. Verification
+
+Check the logs for initialization messages:
+-   `level=INFO msg="ServiceNow client initialized"`
+-   `level=INFO msg="starting source poller" table=incident`
+-   `level=INFO msg="starting sink worker"`
+
+Test the health endpoint:
+```bash
+curl http://localhost:8080/healthz
+```
