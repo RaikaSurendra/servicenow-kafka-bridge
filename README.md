@@ -73,13 +73,9 @@ docker compose up --build
 
 ## 📚 Documentation
 
-Detailed guides are available in `docs/`:
-
-- [Configuration Guide](docs/CONFIGURATION_GUIDE.md): Detailed parameter descriptions and environment variables.
-- [Design Guide](docs/DESIGN_GUIDE.md): Architectural deep dive and data flow logic.
-- [LLD](docs/LLD.md): Low-level design diagrams.
-- [Walkthrough](docs/walkthrough.md): Project structure and operational overview.
-- [Future Roadmap](docs/future_roadmap.md): Planned enhancements and long-term vision.
+- [Getting Started](docs/getting-started.md): Step-by-step setup, configuration, and first run.
+- [Architecture](docs/architecture.md): How the bridge works internally — components, data flow, error handling, and metrics.
+- [Roadmap](docs/roadmap.md): What's been built and what's coming next.
 
 ## 🧪 Testing
 
