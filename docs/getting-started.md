@@ -242,5 +242,6 @@ servicenow-kafka-bridge/
 ## What's Next?
 
 - Read the [Architecture Guide](architecture.md) to understand how the bridge works internally.
+- See [Hybrid Architecture](hybrid-architecture.md) to combine with ServiceNow's IntegrationHub Kafka Spoke.
 - Check the [Roadmap](roadmap.md) to see planned features.
 - See [CONTRIBUTING.md](../CONTRIBUTING.md) if you'd like to contribute.

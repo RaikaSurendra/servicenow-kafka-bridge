@@ -75,6 +75,7 @@ docker compose up --build
 
 - [Getting Started](docs/getting-started.md): Step-by-step setup, configuration, and first run.
 - [Architecture](docs/architecture.md): How the bridge works internally — components, data flow, error handling, and metrics.
+- [Hybrid Architecture](docs/hybrid-architecture.md): Combine with ServiceNow IntegrationHub Kafka Spoke for real-time + batch.
 - [Roadmap](docs/roadmap.md): What's been built and what's coming next.
 
 ## 🧪 Testing
