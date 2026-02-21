@@ -1,0 +1,16 @@
+apiVersion: v2
+name: servicenow-kafka-bridge
+description: Bidirectional Kafka-ServiceNow bridge with at-least-once delivery
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kafka
+  - servicenow
+  - data-integration
+  - etl
+home: https://github.com/RaikaSurendra/servicenow-kafka-bridge
+sources:
+  - https://github.com/RaikaSurendra/servicenow-kafka-bridge
+maintainers:
+  - name: Surendra Raika
