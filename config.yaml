@@ -1,0 +1,84 @@
+# ServiceNow-Kafka Bridge Configuration
+# Environment variables can be used: ${VAR_NAME}
+
+servicenow:
+  # Base URL of your ServiceNow instance (required)
+  base_url: ${SN_BASE_URL}  # e.g. https://instance.service-now.com
+
+  # Table API path (default: /api/now/table)
+  # table_api_path: /api/now/table
+
+  auth:
+    # Authentication type: "oauth" or "basic" (default: oauth)
+    type: oauth
+    oauth:
+      client_id: ${SN_OAUTH_CLIENT_ID}
+      client_secret: ${SN_OAUTH_CLIENT_SECRET}
+      username: ${SN_OAUTH_USERNAME}
+      password: ${SN_OAUTH_PASSWORD}
+      # token_path: /oauth_token.do  # default
+    # basic:
+    #   username: admin
+    #   password: secret
+
+  # HTTP client settings
+  # timeout_seconds: 30          # Overall request timeout
+  # read_timeout_seconds: 25     # Read timeout
+  # conn_timeout_seconds: 10     # Connection timeout
+  # max_retries: -1              # -1 = unlimited retries
+  # retry_backoff_seconds: 30    # Initial backoff between retries
+  # rate_limit_rps: 0            # 0 = disabled; set to limit ServiceNow API calls/sec
+
+kafka:
+  brokers:
+    - localhost:9092
+  # tls:
+  #   enabled: false
+  #   ca_cert: /path/to/ca.pem
+  #   cert_file: /path/to/cert.pem
+  #   key_file: /path/to/key.pem
+  # sasl:
+  #   mechanism: PLAIN  # PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+  #   username: kafka-user
+  #   password: kafka-password
+
+source:
+  enabled: true
+  topic_prefix: servicenow
+
+  # Polling intervals
+  # fast_poll_interval: 500ms    # Used when last poll returned records
+  # slow_poll_interval: 30s      # Used when last poll returned no records
+  # batch_size: 20               # Max records per ServiceNow API request
+  # initial_query_hours_ago: -1  # -1 = unbounded initial query
+  # timestamp_delay_seconds: 0   # Delay before publishing recent records
+
+  tables:
+    - name: incident
+      timestamp_field: sys_updated_on
+      identifier_field: sys_id
+      # fields: []                 # Empty = all fields
+      # topic: ""                  # Default: {topic_prefix}.{name}
+      # partitioner: default       # default, round_robin, or field_based
+      # partition_key_fields: []   # Required when partitioner is field_based
+
+    # - name: change_request
+    #   timestamp_field: sys_updated_on
+    #   identifier_field: sys_id
+
+sink:
+  enabled: false
+  # topics:
+  #   - topic: servicenow.incident.sink
+  #     table: incident
+
+offset:
+  # storage: file                # "file" or "kafka"
+  # file_path: offsets.json      # Path for file-based offset storage
+  # kafka_topic: _bridge_offsets # Topic for Kafka-based offset storage
+  # flush_interval: 5s           # How often to flush file offsets
+
+observability:
+  # addr: ":8080"                # Health/metrics endpoint address
+
+# log_level: info                # debug, info, warn, error
