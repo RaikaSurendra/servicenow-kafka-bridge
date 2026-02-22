@@ -39,7 +39,7 @@ func newTestOAuthServer(t *testing.T, expiresIn int) *httptest.Server {
 			ExpiresIn:    expiresIn,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 }
 
@@ -163,7 +163,7 @@ func TestOAuthAuthenticator_ForceRefresh(t *testing.T) {
 func TestOAuthAuthenticator_InvalidCredentials(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"invalid_client"}`))
+		_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
 	}))
 	defer srv.Close()
 

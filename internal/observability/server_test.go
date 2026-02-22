@@ -23,7 +23,7 @@ func TestServer_HealthEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go srv.Start(ctx)
+	go func() { _ = srv.Start(ctx) }()
 	time.Sleep(100 * time.Millisecond) // let server start
 
 	// We need to get the actual port — use the mux directly
@@ -65,7 +65,7 @@ func TestServer_ReadyEndpoint_Ready(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(recorder.Bytes(), &resp)
+	_ = json.Unmarshal(recorder.Bytes(), &resp)
 	if resp["status"] != "ready" {
 		t.Errorf("status = %q, want ready", resp["status"])
 	}
@@ -80,7 +80,7 @@ func TestServer_MetricsEndpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go srv.Start(ctx)
+	go func() { _ = srv.Start(ctx) }()
 	time.Sleep(100 * time.Millisecond)
 
 	// Test via direct HTTP if server got a real port
@@ -89,7 +89,7 @@ func TestServer_MetricsEndpoint(t *testing.T) {
 		// Server might not have bound yet — just verify handler exists
 		t.Skip("could not connect to metrics endpoint")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 	if !strings.Contains(string(body), "bridge_source_records_total") {

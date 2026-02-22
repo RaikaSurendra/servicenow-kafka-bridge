@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"sync"
 
 	"github.com/hamba/avro/v2"
 )
@@ -18,7 +17,6 @@ type SchemaRegistryClient interface {
 // AvroSerializer handles converting ServiceNow records to Avro bytes with a Confluent magic byte prefix.
 type AvroSerializer struct {
 	registry SchemaRegistryClient
-	mu       sync.RWMutex
 	schemas  map[string]avro.Schema
 }
 
