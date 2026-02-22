@@ -290,6 +290,9 @@ func (c *httpClient) buildTableURL(table, query string, offset, limit int, field
 
 // doWithRetry executes an HTTP request with the configured retry strategy.
 //
+// This is the Go equivalent of ServiceNowTableApiClient.sendWithRetry() from
+// the Java reference (lines 158-225), with significant improvements:
+//
 //   - Exponential backoff with jitter instead of fixed delay
 //   - Distinct handling for 401, 429, 4xx, and 5xx responses
 //   - Context-aware cancellation

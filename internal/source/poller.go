@@ -400,7 +400,7 @@ func (p *Poller) buildBoundedQuery(from, through time.Time) *servicenow.QueryBui
 		clause1.WhereGreaterThan(p.identifierField, p.currentOffset.LastIdentifier)
 	}
 
-	// Filter out records with no identifier.
+	// Filter out records with no identifier (safety check from Java reference).
 	clause1.WhereIsNotEmpty(p.identifierField)
 
 	// Clause 2: Open interval for newer records.

@@ -203,7 +203,7 @@ func TestUnion(t *testing.T) {
 }
 
 func TestUnboundedQuery(t *testing.T) {
-	// Unbounded query: fetch all records ordered by timestamp and identifier
+	// Port of buildQueryUnboundedQuery from TableAPISubTask.java
 	q := NewQueryBuilder().
 		WhereIsNotEmpty("sys_id").
 		OrderByAsc("sys_updated_on").
